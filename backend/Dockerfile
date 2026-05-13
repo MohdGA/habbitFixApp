@@ -23,7 +23,7 @@ RUN addgroup -g 1001 -S nodejs && adduser -S quitly -u 1001
 COPY --from=builder --chown=quitly:nodejs /app/dist ./dist
 COPY --from=builder --chown=quitly:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=quitly:nodejs /app/package*.json ./
-COPY --from=/prod_modules --chown=quitly:nodejs /prod_modules ./node_modules
+COPY --from=deps --chown=quitly:nodejs /prod_modules ./node_modules
 
 USER quitly
 
