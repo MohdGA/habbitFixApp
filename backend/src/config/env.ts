@@ -71,16 +71,18 @@ function loadEnv(): EnvConfig {
 
 export const env = loadEnv();
 
-// Load RSA keys
-function loadKey(keyPath: string): string {
+// Load RSA keys — env var takes priority over file path (for cloud deployments)
+function loadKey(envVarName: string, keyPath: string): string {
+  const inline = process.env[envVarName];
+  if (inline) return inline.replace(/\\n/g, '\n');
   const resolvedPath = path.resolve(keyPath);
   if (!fs.existsSync(resolvedPath)) {
-    throw new Error(`Key file not found: ${resolvedPath}. Run: npm run keys:gen`);
+    throw new Error(`Key file not found: ${resolvedPath}. Set ${envVarName} env var or run: npm run keys:gen`);
   }
   return fs.readFileSync(resolvedPath, 'utf-8');
 }
 
 export const jwtKeys = {
-  private: loadKey(env.JWT_PRIVATE_KEY_PATH),
-  public: loadKey(env.JWT_PUBLIC_KEY_PATH),
+  private: loadKey('JWT_PRIVATE_KEY', env.JWT_PRIVATE_KEY_PATH),
+  public: loadKey('JWT_PUBLIC_KEY', env.JWT_PUBLIC_KEY_PATH),
 };
