@@ -1,0 +1,355 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "windows"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum HabitType {
+  QUIT      // binary: did/didn't do it today
+  REDUCE    // numeric: track amount per day
+  BUILD     // binary: positive habit to build
+}
+
+enum HabitFrequency {
+  DAILY
+  WEEKLY
+  CUSTOM
+}
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+  BOTH
+}
+
+enum BadgeType {
+  STREAK_7
+  STREAK_30
+  STREAK_100
+  STREAK_365
+  SAVINGS_100
+  SAVINGS_1000
+  FIRST_CHECKIN
+  NIGHT_OWL
+  EARLY_BIRD
+  SOCIAL_SUPPORTER
+  FREEZE_MASTER
+}
+
+enum CommunityPostType {
+  MILESTONE
+  TIP
+  STRUGGLE
+  WIN
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  username          String    @unique
+  displayName       String
+  passwordHash      String
+  avatarUrl         String?
+  timezone          String    @default("UTC")
+  currency          String    @default("BHD")
+  fcmToken          String?
+  emailVerified     Boolean   @default(false)
+  emailVerifyToken  String?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  habits            Habit[]
+  checkins          Checkin[]
+  freezeTokens      FreezeToken[]
+  badges            UserBadge[]
+  notifications     Notification[]
+  refreshTokens     RefreshToken[]
+  communityPosts    CommunityPost[]
+  communityLikes    CommunityLike[]
+  communityComments CommunityComment[]
+  notificationPrefs NotificationPreference?
+  stats             UserStats?
+
+  @@index([email])
+  @@index([username])
+}
+
+model NotificationPreference {
+  id                String              @id @default(uuid())
+  userId            String              @unique
+  channel           NotificationChannel @default(PUSH)
+  dailyReminderTime String              @default("20:00") // HH:MM
+  streakAlerts      Boolean             @default(true)
+  weeklyReport      Boolean             @default(true)
+  milestoneAlerts   Boolean             @default(true)
+  communityAlerts   Boolean             @default(true)
+  updatedAt         DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserStats {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  totalXp            Int      @default(0)
+  level              Int      @default(1)
+  totalCheckins      Int      @default(0)
+  totalDaysClean     Int      @default(0)
+  longestStreak      Int      @default(0)
+  totalMoneySaved    Float    @default(0)
+  totalFreezeUsed    Int      @default(0)
+  lastActiveAt       DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   String    @unique
+  family      String    // for reuse detection
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([family])
+}
+
+// ─── Habits ───────────────────────────────────────────────────────────────────
+
+model Habit {
+  id              String         @id @default(uuid())
+  userId          String
+  name            String
+  emoji           String         @default("🎯")
+  type            HabitType
+  frequency       HabitFrequency @default(DAILY)
+  customDays      Int[]          @default([])  // 0=Sun, 1=Mon, ..., 6=Sat
+  targetAmount    Float?         // for REDUCE type: daily limit
+  unit            String?        // e.g. "cigarettes", "drinks", "mg"
+  costPerUnit     Float?         // for savings calculation
+  reminderTime    String?        // HH:MM
+  color           String         @default("#FF9F0A")
+  isArchived      Boolean        @default(false)
+  startDate       DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkins        Checkin[]
+  streaks         Streak[]
+  savingsGoal     SavingsGoal?
+
+  @@index([userId])
+  @@index([userId, isArchived])
+}
+
+model Checkin {
+  id          String    @id @default(uuid())
+  userId      String
+  habitId     String
+  date        DateTime  @db.Date
+  success     Boolean   @default(true)
+  amount      Float?    // for REDUCE: actual amount consumed
+  mood        Int?      // 1-5
+  note        String?
+  xpEarned    Int       @default(10)
+  createdAt   DateTime  @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, date])
+  @@index([userId])
+  @@index([habitId, date])
+}
+
+model Streak {
+  id             String    @id @default(uuid())
+  habitId        String
+  currentStreak  Int       @default(0)
+  longestStreak  Int       @default(0)
+  lastCheckinAt  DateTime?
+  freezeCount    Int       @default(0)
+  updatedAt      DateTime  @updatedAt
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId])
+}
+
+model FreezeToken {
+  id        String    @id @default(uuid())
+  userId    String
+  habitId   String?
+  earnedAt  DateTime  @default(now())
+  usedAt    DateTime?
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─── Savings ──────────────────────────────────────────────────────────────────
+
+model SavingsGoal {
+  id              String    @id @default(uuid())
+  habitId         String    @unique
+  goalName        String
+  goalAmount      Float
+  currentSavings  Float     @default(0)
+  emoji           String    @default("🎯")
+  deadline        DateTime?
+  achieved        Boolean   @default(false)
+  achievedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+}
+
+// ─── Badges ───────────────────────────────────────────────────────────────────
+
+model Badge {
+  id          String    @id @default(uuid())
+  type        BadgeType @unique
+  name        String
+  description String
+  emoji       String
+  xpReward    Int       @default(50)
+
+  userBadges UserBadge[]
+}
+
+model UserBadge {
+  id        String    @id @default(uuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime  @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean   @default(false)
+  sentAt    DateTime  @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+// ─── Community ────────────────────────────────────────────────────────────────
+
+model CommunityPost {
+  id        String            @id @default(uuid())
+  userId    String
+  type      CommunityPostType
+  title     String
+  content   String
+  habitName String?
+  streak    Int?
+  isPublic  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes    CommunityLike[]
+  comments CommunityComment[]
+
+  @@index([type, createdAt])
+  @@index([userId])
+}
+
+model CommunityLike {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+}
+
+model CommunityComment {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+}
+
+// ─── Quotes ───────────────────────────────────────────────────────────────────
+
+model Quote {
+  id        String   @id @default(uuid())
+  text      String
+  author    String?
+  tags      String[]
+  createdAt DateTime @default(now())
+}
+
+// ─── Health Milestones ────────────────────────────────────────────────────────
+
+model HealthMilestone {
+  id          String  @id @default(uuid())
+  habitType   String  // e.g. "smoking", "alcohol", "general"
+  dayMark     Float   // days since quitting
+  title       String
+  description String
+  emoji       String
+  category    String  // "cardiovascular", "respiratory", "mental", etc.
+  sortOrder   Int     @default(0)
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  ip        String
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}

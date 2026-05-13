@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: quitly_test
+          POSTGRES_USER: quitly
+          POSTGRES_PASSWORD: quitly_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate RSA keys for testing
+        run: node scripts/gen-keys.js
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://quitly:quitly_pass@localhost:5432/quitly_test
+
+      - name: Run tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://quitly:quitly_pass@localhost:5432/quitly_test
+          REDIS_URL: redis://localhost:6379
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JWT_PRIVATE_KEY_PATH: ./keys/private.pem
+          JWT_PUBLIC_KEY_PATH: ./keys/public.pem
+          REFRESH_TOKEN_SECRET: test-secret-minimum-32-characters!!
+          SMTP_USER: test@test.com
+          SMTP_PASS: testpass
+
+      - name: Build
+        run: npm run build
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
