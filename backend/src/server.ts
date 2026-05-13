@@ -32,7 +32,12 @@ async function bootstrap() {
       timestamp: new Date().toISOString(),
     }));
 
-    // Connect database
+    // Start server first so healthcheck can pass immediately
+    await app.listen({ port: env.PORT, host: env.HOST });
+    app.log.info(`🚀 Quitly API running at http://${env.HOST}:${env.PORT}`);
+    app.log.info(`📚 API docs at http://${env.HOST}:${env.PORT}/docs`);
+
+    // Connect database after server is listening
     await connectDb();
     app.log.info('✅ Database connected');
 
@@ -43,11 +48,6 @@ async function bootstrap() {
     } catch (err) {
       app.log.warn({ err }, '⚠️ BullMQ workers not started (Redis may be unavailable)');
     }
-
-    // Start server
-    await app.listen({ port: env.PORT, host: env.HOST });
-    app.log.info(`🚀 Quitly API running at http://${env.HOST}:${env.PORT}`);
-    app.log.info(`📚 API docs at http://${env.HOST}:${env.PORT}/docs`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

@@ -7,5 +7,5 @@ keys/
 *.pem
 coverage/
 .nyc_output/
-prisma/migrations/**/migration.sql
+# prisma/migrations/**/migration.sql  # tracked in git for Railway deployment
 *.log
