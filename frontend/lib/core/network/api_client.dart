@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../storage/secure_storage.dart';
 import '../errors/app_exception.dart';
 
-const _baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:4000/api/v1');
+const _baseUrl = String.fromEnvironment('API_URL', defaultValue: 'https://habbitfixapp-production.up.railway.app/api/v1');
 
 // Mutex for refresh token concurrency
 bool _isRefreshing = false;
