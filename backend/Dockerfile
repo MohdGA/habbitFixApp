@@ -24,6 +24,8 @@ COPY --from=builder --chown=quitly:nodejs /app/dist ./dist
 COPY --from=builder --chown=quitly:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=quitly:nodejs /app/package*.json ./
 COPY --from=deps --chown=quitly:nodejs /prod_modules ./node_modules
+# Prisma generate output lives in node_modules/.prisma — copy from builder (deps never ran generate)
+COPY --from=builder --chown=quitly:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 USER quitly
 
